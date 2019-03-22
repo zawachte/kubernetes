@@ -1063,7 +1063,7 @@ func (proxier *Proxier) syncProxyRules() {
 
 			if newHnsEndpoint != nil {
 				if newHnsEndpoint.isLocal && proxier.isDSR {
-					var flag = false
+					var alreadyHasDSRPolicy = false
 					for _, po := range newHnsEndpoint.policies {
 						if po.Type == OutBoundNAT {
 							var outputSettings outboundnatpolicysetting
@@ -1071,11 +1071,11 @@ func (proxier *Proxier) syncProxyRules() {
 								break
 							}
 							if outputSettings.VirtualIP == newHnsEndpoint.ip {
-								flag = true
+								alreadyHasDSRPolicy = true
 							}
 						}
 					}
-					if !flag {
+					if !alreadyHasDSRPolicy {
 						klog.Infof("Setting DSR policy for local endpoint %s", newHnsEndpoint.hnsID)
 						policysetting := outboundnatpolicysetting{
 							VirtualIP: newHnsEndpoint.ip,
