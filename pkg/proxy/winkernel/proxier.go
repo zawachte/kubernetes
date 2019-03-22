@@ -149,7 +149,7 @@ type endpointsInfo struct {
 	refCount        uint16
 	providerAddress string
 	hns             HostNetworkService
-	policies        []*policiesInfo
+	policies        []*policiesinfo
 }
 
 // EndpointPolicyType are the potential Policies that apply to Endpoints.
@@ -171,7 +171,7 @@ const (
 )
 
 // internal struct for policies information
-type policiesInfo struct {
+type policiesinfo struct {
 	Type     EndpointPolicyType
 	Settings json.RawMessage
 }
@@ -181,9 +181,9 @@ type outboundnatpolicysetting struct {
 	VirtualIP string
 }
 
-// Exceptions []string
+// Endpoint request for updating endpoint policies
 type policyendpointrequest struct {
-	Policies []policiesInfo
+	Policies []policiesinfo
 }
 
 //Uses mac prefix and IPv4 address to return a mac address
@@ -571,9 +571,6 @@ func NewProxier(
 	isDSR := config.EnableDSR
 	if isDSR && !utilfeature.DefaultFeatureGate.Enabled(genericfeatures.WinDSR) {
 		return nil, fmt.Errorf("WinDSR feature gate not enabled")
-	}
-	if isDSR {
-		klog.V(1).Infof("DSR SET")
 	}
 	err = hcn.DSRSupported()
 	if isDSR && err != nil {
@@ -1066,7 +1063,6 @@ func (proxier *Proxier) syncProxyRules() {
 
 			if newHnsEndpoint != nil {
 				if newHnsEndpoint.isLocal && proxier.isDSR {
-					klog.Infof("In DSR Endpoint")
 					var flag = false
 					for _, po := range newHnsEndpoint.policies {
 						if po.Type == OutBoundNAT {
@@ -1080,6 +1076,7 @@ func (proxier *Proxier) syncProxyRules() {
 						}
 					}
 					if !flag {
+						klog.Infof("Setting DSR policy for local endpoint %s", newHnsEndpoint.hnsID)
 						policysetting := outboundnatpolicysetting{
 							VirtualIP: newHnsEndpoint.ip,
 						}
@@ -1088,20 +1085,18 @@ func (proxier *Proxier) syncProxyRules() {
 						if err != nil {
 							break
 						}
-						newLoopbackPolicy := policiesInfo{
+						newLoopbackPolicy := policiesinfo{
 							Type:     OutBoundNAT,
 							Settings: rawJSON,
 						}
 						endpointRequest := policyendpointrequest{
-							Policies: []policiesInfo{newLoopbackPolicy},
+							Policies: []policiesinfo{newLoopbackPolicy},
 						}
 
 						settingsJson, err := json.Marshal(endpointRequest)
 						if err != nil {
 							break
 						}
-
-						klog.Infof("Should be set Policy %s", settingsJson)
 						err = hns.updateEndpointPolicy(newHnsEndpoint.hnsID, settingsJson)
 						if err != nil {
 							klog.Errorf("Error Updating EndpointPolicy err: %v ", err)

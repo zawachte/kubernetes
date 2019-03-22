@@ -89,7 +89,7 @@ func (hns hnsV2) getEndpointByIpAddress(ip string, networkName string) (*endpoin
 			equal = endpoint.IpConfigurations[0].IpAddress == ip
 		}
 		if equal && strings.EqualFold(endpoint.HostComputeNetwork, hnsnetwork.Id) {
-			pol := transformToPoliciesInfo(endpoint.Policies)
+			pol := transformToPoliciesinfo(endpoint.Policies)
 			return &endpointsInfo{
 				ip:         endpoint.IpConfigurations[0].IpAddress,
 				isLocal:    uint32(endpoint.Flags&hcn.EndpointFlagsRemoteEndpoint) == 0, //TODO: Change isLocal to isRemote
@@ -103,11 +103,10 @@ func (hns hnsV2) getEndpointByIpAddress(ip string, networkName string) (*endpoin
 
 	return nil, fmt.Errorf("Endpoint %v not found on network %s", ip, networkName)
 }
-
-func transformToPoliciesInfo(hcnendpointpolicies []hcn.EndpointPolicy) []*policiesInfo {
-	var endpointPolicies []*policiesInfo
+func transformToPoliciesinfo(hcnendpointpolicies []hcn.EndpointPolicy) []*policiesinfo {
+	var endpointPolicies []*policiesinfo
 	for _, po := range hcnendpointpolicies {
-		var policy policiesInfo
+		var policy policiesinfo
 		policy.Type = EndpointPolicyType(po.Type)
 		policy.Settings = po.Settings
 		endpointPolicies = append(endpointPolicies, &policy)
@@ -178,7 +177,9 @@ func (hns hnsV2) updateEndpointPolicy(hnsID string, policy json.RawMessage) erro
 		Settings:     policy,
 	}
 
-	klog.V(3).Infof("HNSHNSHNSHNS HERE Remote endpoint policy added %s and then json %s", hnsID, policy)
+	klog.V(3).Infof("Local endpoint policy added to %s", hnsID)
+	LogJson(policy, "Local endpoint policy:", 1)
+
 	return hcn.ModifyEndpointSettings(hnsID, requestMessage)
 }
 func (hns hnsV2) deleteEndpoint(hnsID string) error {

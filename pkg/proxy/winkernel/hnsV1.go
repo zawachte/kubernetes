@@ -226,6 +226,5 @@ func (hns hnsV1) deleteLoadBalancer(hnsID string) error {
 }
 
 func (hns hnsV1) updateEndpointPolicy(hnsID string, policy json.RawMessage) error {
-	klog.V(3).Info("DSR is not supported in V1. Using non DSR instead")
-	return nil
+	return fmt.Errorf("DSR is not supported in V1. Using non DSR instead")
 }
