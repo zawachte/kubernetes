@@ -143,11 +143,47 @@ type endpointsInfo struct {
 	ip              string
 	port            uint16
 	isLocal         bool
+	isDSR           bool
 	macAddress      string
 	hnsID           string
 	refCount        uint16
 	providerAddress string
 	hns             HostNetworkService
+	policies        []*policiesInfo
+}
+
+// EndpointPolicyType are the potential Policies that apply to Endpoints.
+type EndpointPolicyType string
+
+// EndpointPolicyType const
+const (
+	PortMapping                EndpointPolicyType = "PortMapping"
+	ACL                        EndpointPolicyType = "ACL"
+	QOS                        EndpointPolicyType = "QOS"
+	L2Driver                   EndpointPolicyType = "L2Driver"
+	OutBoundNAT                EndpointPolicyType = "OutBoundNAT"
+	SDNRoute                   EndpointPolicyType = "SDNRoute"
+	L4Proxy                    EndpointPolicyType = "L4Proxy"
+	PortName                   EndpointPolicyType = "PortName"
+	EncapOverhead              EndpointPolicyType = "EncapOverhead"
+	NetworkProviderAddress     EndpointPolicyType = "ProviderAddress"
+	NetworkInterfaceConstraint EndpointPolicyType = "InterfaceConstraint"
+)
+
+// internal struct for policies information
+type policiesInfo struct {
+	Type     EndpointPolicyType
+	Settings json.RawMessage
+}
+
+// OutboundNatPolicySetting sets outbound Network Address Translation on an Endpoint.
+type outboundnatpolicysetting struct {
+	VirtualIP string
+}
+
+// Exceptions []string
+type policyendpointrequest struct {
+	Policies []policiesInfo
 }
 
 //Uses mac prefix and IPv4 address to return a mac address
@@ -218,7 +254,7 @@ func newServiceInfo(svcPortName proxy.ServicePortName, port *v1.ServicePort, ser
 		stickyMaxAgeSeconds:      stickyMaxAgeSeconds,
 		loadBalancerSourceRanges: make([]string, len(service.Spec.LoadBalancerSourceRanges)),
 		onlyNodeLocalEndpoints:   onlyNodeLocalEndpoints,
-		hns:                      hns,
+		hns: hns,
 	}
 
 	copy(info.loadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
@@ -535,6 +571,9 @@ func NewProxier(
 	isDSR := config.EnableDSR
 	if isDSR && !utilfeature.DefaultFeatureGate.Enabled(genericfeatures.WinDSR) {
 		return nil, fmt.Errorf("WinDSR feature gate not enabled")
+	}
+	if isDSR {
+		klog.V(1).Infof("DSR SET")
 	}
 	err = hcn.DSRSupported()
 	if isDSR && err != nil {
@@ -1025,6 +1064,53 @@ func (proxier *Proxier) syncProxyRules() {
 				newHnsEndpoint, err = hns.getEndpointByIpAddress(ep.ip, hnsNetworkName)
 			}
 
+			if newHnsEndpoint != nil {
+				if newHnsEndpoint.isLocal && proxier.isDSR {
+					klog.Infof("In DSR Endpoint")
+					var flag = false
+					for _, po := range newHnsEndpoint.policies {
+						if po.Type == OutBoundNAT {
+							var outputSettings outboundnatpolicysetting
+							if err := json.Unmarshal([]byte(po.Settings), &outputSettings); err != nil {
+								break
+							}
+							if outputSettings.VirtualIP == newHnsEndpoint.ip {
+								flag = true
+							}
+						}
+					}
+					if !flag {
+						policysetting := outboundnatpolicysetting{
+							VirtualIP: newHnsEndpoint.ip,
+						}
+
+						rawJSON, err := json.Marshal(policysetting)
+						if err != nil {
+							break
+						}
+						newLoopbackPolicy := policiesInfo{
+							Type:     OutBoundNAT,
+							Settings: rawJSON,
+						}
+						endpointRequest := policyendpointrequest{
+							Policies: []policiesInfo{newLoopbackPolicy},
+						}
+
+						settingsJson, err := json.Marshal(endpointRequest)
+						if err != nil {
+							break
+						}
+
+						klog.Infof("Should be set Policy %s", settingsJson)
+						err = hns.updateEndpointPolicy(newHnsEndpoint.hnsID, settingsJson)
+						if err != nil {
+							klog.Errorf("Error Updating EndpointPolicy err: %v ", err)
+							break
+						}
+						newHnsEndpoint.policies = append(newHnsEndpoint.policies, &newLoopbackPolicy)
+					}
+				}
+			}
 			if newHnsEndpoint == nil {
 				if ep.isLocal {
 					klog.Errorf("Local endpoint not found for %v: err: %v on network %s", ep.ip, err, hnsNetworkName)

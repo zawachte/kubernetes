@@ -89,17 +89,30 @@ func (hns hnsV2) getEndpointByIpAddress(ip string, networkName string) (*endpoin
 			equal = endpoint.IpConfigurations[0].IpAddress == ip
 		}
 		if equal && strings.EqualFold(endpoint.HostComputeNetwork, hnsnetwork.Id) {
+			pol := transformToPoliciesInfo(endpoint.Policies)
 			return &endpointsInfo{
 				ip:         endpoint.IpConfigurations[0].IpAddress,
 				isLocal:    uint32(endpoint.Flags&hcn.EndpointFlagsRemoteEndpoint) == 0, //TODO: Change isLocal to isRemote
 				macAddress: endpoint.MacAddress,
 				hnsID:      endpoint.Id,
 				hns:        hns,
+				policies:   pol,
 			}, nil
 		}
 	}
 
 	return nil, fmt.Errorf("Endpoint %v not found on network %s", ip, networkName)
+}
+
+func transformToPoliciesInfo(hcnendpointpolicies []hcn.EndpointPolicy) []*policiesInfo {
+	var endpointPolicies []*policiesInfo
+	for _, po := range hcnendpointpolicies {
+		var policy policiesInfo
+		policy.Type = EndpointPolicyType(po.Type)
+		policy.Settings = po.Settings
+		endpointPolicies = append(endpointPolicies, &policy)
+	}
+	return endpointPolicies
 }
 func (hns hnsV2) createEndpoint(ep *endpointsInfo, networkName string) (*endpointsInfo, error) {
 	hnsNetwork, err := hcn.GetNetworkByName(networkName)
@@ -157,6 +170,16 @@ func (hns hnsV2) createEndpoint(ep *endpointsInfo, networkName string) (*endpoin
 		providerAddress: ep.providerAddress, //TODO get from createdEndpoint
 		hns:             hns,
 	}, nil
+}
+func (hns hnsV2) updateEndpointPolicy(hnsID string, policy json.RawMessage) error {
+	requestMessage := &hcn.ModifyEndpointSettingRequest{
+		ResourceType: "Policy",
+		RequestType:  "Add",
+		Settings:     policy,
+	}
+
+	klog.V(3).Infof("HNSHNSHNSHNS HERE Remote endpoint policy added %s and then json %s", hnsID, policy)
+	return hcn.ModifyEndpointSettings(hnsID, requestMessage)
 }
 func (hns hnsV2) deleteEndpoint(hnsID string) error {
 	hnsendpoint, err := hcn.GetEndpointByID(hnsID)
