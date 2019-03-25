@@ -67,12 +67,14 @@ func (hns hnsV2) getEndpointByID(id string) (*endpointsInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	pol := transformToPoliciesinfo(hnsendpoint.Policies)
 	return &endpointsInfo{ //TODO: fill out PA
 		ip:         hnsendpoint.IpConfigurations[0].IpAddress,
 		isLocal:    uint32(hnsendpoint.Flags&hcn.EndpointFlagsRemoteEndpoint) == 0, //TODO: Change isLocal to isRemote
 		macAddress: hnsendpoint.MacAddress,
 		hnsID:      hnsendpoint.Id,
 		hns:        hns,
+		policies:   pol,
 	}, nil
 }
 func (hns hnsV2) getEndpointByIpAddress(ip string, networkName string) (*endpointsInfo, error) {
@@ -107,9 +109,10 @@ func transformToPoliciesinfo(hcnendpointpolicies []hcn.EndpointPolicy) []*polici
 	var endpointPolicies []*policiesinfo
 	for _, po := range hcnendpointpolicies {
 		var policy policiesinfo
-		policy.Type = EndpointPolicyType(po.Type)
+		policy.Type = string(po.Type)
 		policy.Settings = po.Settings
 		endpointPolicies = append(endpointPolicies, &policy)
+		klog.V(3).Infof("endpoint policy:%s", policy)
 	}
 	return endpointPolicies
 }
@@ -161,6 +164,7 @@ func (hns hnsV2) createEndpoint(ep *endpointsInfo, networkName string) (*endpoin
 			return nil, fmt.Errorf("Local endpoint creation failed: %v", err)
 		}
 	}
+	pol := transformToPoliciesinfo(createdEndpoint.Policies)
 	return &endpointsInfo{
 		ip:              createdEndpoint.IpConfigurations[0].IpAddress,
 		isLocal:         uint32(createdEndpoint.Flags&hcn.EndpointFlagsRemoteEndpoint) == 0,
@@ -168,6 +172,7 @@ func (hns hnsV2) createEndpoint(ep *endpointsInfo, networkName string) (*endpoin
 		hnsID:           createdEndpoint.Id,
 		providerAddress: ep.providerAddress, //TODO get from createdEndpoint
 		hns:             hns,
+		policies:        pol,
 	}, nil
 }
 func (hns hnsV2) updateEndpointPolicy(hnsID string, policy json.RawMessage) error {

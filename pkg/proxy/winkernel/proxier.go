@@ -24,6 +24,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -152,27 +153,9 @@ type endpointsInfo struct {
 	policies        []*policiesinfo
 }
 
-// EndpointPolicyType are the potential Policies that apply to Endpoints.
-type EndpointPolicyType string
-
-// EndpointPolicyType const
-const (
-	PortMapping                EndpointPolicyType = "PortMapping"
-	ACL                        EndpointPolicyType = "ACL"
-	QOS                        EndpointPolicyType = "QOS"
-	L2Driver                   EndpointPolicyType = "L2Driver"
-	OutBoundNAT                EndpointPolicyType = "OutBoundNAT"
-	SDNRoute                   EndpointPolicyType = "SDNRoute"
-	L4Proxy                    EndpointPolicyType = "L4Proxy"
-	PortName                   EndpointPolicyType = "PortName"
-	EncapOverhead              EndpointPolicyType = "EncapOverhead"
-	NetworkProviderAddress     EndpointPolicyType = "ProviderAddress"
-	NetworkInterfaceConstraint EndpointPolicyType = "InterfaceConstraint"
-)
-
 // internal struct for policies information
 type policiesinfo struct {
-	Type     EndpointPolicyType
+	Type     string
 	Settings json.RawMessage
 }
 
@@ -1065,12 +1048,12 @@ func (proxier *Proxier) syncProxyRules() {
 				if newHnsEndpoint.isLocal && proxier.isDSR {
 					var alreadyHasDSRPolicy = false
 					for _, po := range newHnsEndpoint.policies {
-						if po.Type == OutBoundNAT {
+						if strings.Compare(po.Type, "OutBoundNAT") == 0 {
 							var outputSettings outboundnatpolicysetting
 							if err := json.Unmarshal([]byte(po.Settings), &outputSettings); err != nil {
 								break
 							}
-							if outputSettings.VirtualIP == newHnsEndpoint.ip {
+							if strings.Compare(outputSettings.VirtualIP, newHnsEndpoint.ip) == 0 {
 								alreadyHasDSRPolicy = true
 							}
 						}
@@ -1086,7 +1069,7 @@ func (proxier *Proxier) syncProxyRules() {
 							break
 						}
 						newLoopbackPolicy := policiesinfo{
-							Type:     OutBoundNAT,
+							Type:     "OutBoundNAT",
 							Settings: rawJSON,
 						}
 						endpointRequest := policyendpointrequest{
