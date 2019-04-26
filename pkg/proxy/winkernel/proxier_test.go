@@ -19,7 +19,7 @@ limitations under the License.
 package winkernel
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/proxy"
 
@@ -287,8 +287,8 @@ func TestMultipleEndpointsOverlay(t *testing.T) {
 						IP: epIpAddressRemote,
 					},
 					{
-						IP: sharedLocalEndpointIp
-					}
+						IP: sharedLocalEndpointIp,
+					},
 				},
 				Ports: []v1.EndpointPort{{
 					Name: svcPortName.Port,
@@ -318,8 +318,8 @@ func TestMultipleEndpointsOverlay(t *testing.T) {
 						IP: epIpAddressRemote,
 					},
 					{
-						IP: sharedLocalEndpointIp
-					}
+						IP: sharedLocalEndpointIp,
+					},
 				},
 				Ports: []v1.EndpointPort{{
 					Name: svc1PortName.Port,
@@ -340,7 +340,8 @@ func TestMultipleEndpointsOverlay(t *testing.T) {
 			t.Errorf("%v is shared between two services, but refcount should still be one", ep.hnsID)
 		}
 	}
-}go run
+}
+
 func TestCreateRemoteEndpointL2Bridge(t *testing.T) {
 	syncPeriod := 30 * time.Second
 	proxier := NewFakeProxier(syncPeriod, syncPeriod, clusterCIDR, "testhost", net.ParseIP("10.0.0.1"), "L2Bridge")
