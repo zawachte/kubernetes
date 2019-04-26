@@ -38,6 +38,7 @@ const clusterCIDR = "192.168.1.0/24"
 const destinationPrefix = "192.168.2.0/24"
 const providerAddress = "10.0.0.3"
 const guid = "123ABC"
+const sharedLocalEndpointIp = "12.34.56.78"
 
 type fakeHealthChecker struct {
 	services  map[types.NamespacedName]uint16
@@ -242,6 +243,104 @@ func TestCreateRemoteEndpointOverlay(t *testing.T) {
 		t.Errorf("%v does not match %v", proxier.endpointsMap[svcPortName][0].hnsID, guid)
 	}
 }
+
+func TestMultipleEndpointsOverlay(t *testing.T) {
+	syncPeriod := 30 * time.Second
+	proxier := NewFakeProxier(syncPeriod, syncPeriod, clusterCIDR, "testhost", net.ParseIP("10.0.0.1"), "Overlay")
+	if proxier == nil {
+		t.Error()
+	}
+
+	svcIP := "10.20.30.41"
+	svcPort := 80
+	svcNodePort := 3001
+	svcPortName := proxy.ServicePortName{
+		NamespacedName: makeNSN("ns1", "svc1"),
+		Port:           "p80",
+	}
+
+	svc1IP := "10.20.30.42"
+	svc1Port := 81
+	svc1NodePort := 3002
+	svc1PortName := proxy.ServicePortName{
+		NamespacedName: makeNSN("ns2", "svc2"),
+		Port:           "p81",
+	}
+
+	makeServiceMap(proxier,
+		makeTestService(svcPortName.Namespace, svcPortName.Name, func(svc *v1.Service) {
+			svc.Spec.Type = "NodePort"
+			svc.Spec.ClusterIP = svcIP
+			svc.Spec.Ports = []v1.ServicePort{{
+				Name:     svcPortName.Port,
+				Port:     int32(svcPort),
+				Protocol: v1.ProtocolTCP,
+				NodePort: int32(svcNodePort),
+			}}
+		}),
+	)
+	makeEndpointsMap(proxier,
+		makeTestEndpoints(svcPortName.Namespace, svcPortName.Name, func(ept *v1.Endpoints) {
+			ept.Subsets = []v1.EndpointSubset{{
+				Addresses: []v1.EndpointAddress{
+					{
+						IP: epIpAddressRemote,
+					},
+					{
+						IP: sharedLocalEndpointIp
+					}
+				},
+				Ports: []v1.EndpointPort{{
+					Name: svcPortName.Port,
+					Port: int32(svcPort),
+				}},
+			}}
+		}),
+	)
+
+	makeServiceMap(proxier,
+		makeTestService(svc1PortName.Namespace, svc1PortName.Name, func(svc *v1.Service) {
+			svc.Spec.Type = "NodePort"
+			svc.Spec.ClusterIP = svc1IP
+			svc.Spec.Ports = []v1.ServicePort{{
+				Name:     svc1PortName.Port,
+				Port:     int32(svc1Port),
+				Protocol: v1.ProtocolTCP,
+				NodePort: int32(svc1NodePort),
+			}}
+		}),
+	)
+	makeEndpointsMap(proxier,
+		makeTestEndpoints(svc1PortName.Namespace, svc1PortName.Name, func(ept *v1.Endpoints) {
+			ept.Subsets = []v1.EndpointSubset{{
+				Addresses: []v1.EndpointAddress{
+					{
+						IP: epIpAddressRemote,
+					},
+					{
+						IP: sharedLocalEndpointIp
+					}
+				},
+				Ports: []v1.EndpointPort{{
+					Name: svc1PortName.Port,
+					Port: int32(svc1Port),
+				}},
+			}}
+		}),
+	)
+
+	proxier.syncProxyRules()
+	for _, ep := range proxier.endpointsMap[svcPortName] {
+		if ep.refCount > 1 {
+			t.Errorf("%v is shared between two services, but refcount should still be one", ep.hnsID)
+		}
+	}
+	for _, ep := range proxier.endpointsMap[svc1PortName] {
+		if ep.refCount > 1 {
+			t.Errorf("%v is shared between two services, but refcount should still be one", ep.hnsID)
+		}
+	}
+}go run
 func TestCreateRemoteEndpointL2Bridge(t *testing.T) {
 	syncPeriod := 30 * time.Second
 	proxier := NewFakeProxier(syncPeriod, syncPeriod, clusterCIDR, "testhost", net.ParseIP("10.0.0.1"), "L2Bridge")

@@ -918,10 +918,9 @@ func endpointsToEndpointsMap(endpoints *v1.Endpoints, hostname string, hns HostN
 				for _, endpointInfoList := range proxierendpointsMap {
 					for _, ep := range endpointInfoList {
 						if ep.ip == addr.IP {
-							klog.Infof("Already have reference to endpoint with ip: %v", addr.IP)
-							epInfo := ep
-							endpointsMap[svcPortName] = append(endpointsMap[svcPortName], epInfo)
 							isAlreadyEndpoint = true
+							klog.Infof("Already have reference to endpoint with ip: %v", addr.IP)
+							endpointsMap[svcPortName] = append(endpointsMap[svcPortName], ep)
 						}
 					}
 				}
@@ -929,6 +928,7 @@ func endpointsToEndpointsMap(endpoints *v1.Endpoints, hostname string, hns HostN
 					isLocal := addr.NodeName != nil && *addr.NodeName == hostname
 					epInfo := newEndpointInfo(addr.IP, uint16(port.Port), isLocal, hns)
 					endpointsMap[svcPortName] = append(endpointsMap[svcPortName], epInfo)
+					klog.Infof("Added new endpoint reference with ip: %v", addr.IP)
 				}
 			}
 			if klog.V(3) {
@@ -1087,7 +1087,7 @@ func (proxier *Proxier) syncProxyRules() {
 			// Need to add an OutboundNat policy to local endpoints for DSR loopback to properly work.
 			if newHnsEndpoint != nil {
 				if newHnsEndpoint.isLocal && proxier.isDSR {
-					var addDSRPolicy = false
+					var hasDSRPolicy = false
 					for _, po := range newHnsEndpoint.policies {
 						if po.Type == "OutBoundNAT" {
 							var outputSettings outboundnatpolicysetting
@@ -1097,12 +1097,12 @@ func (proxier *Proxier) syncProxyRules() {
 							}
 							for _, des := range outputSettings.Destinations {
 								if des == newHnsEndpoint.ip {
-									addDSRPolicy = true
+									hasDSRPolicy = true
 								}
 							}
 						}
 					}
-					if !addDSRPolicy {
+					if !hasDSRPolicy {
 						loopbackPolicy, err := addDSRPolicyToEndpoint(hns, newHnsEndpoint)
 						if err != nil {
 							klog.Errorf("Error Setting DSR Endpoint Policy err: %v ", err)

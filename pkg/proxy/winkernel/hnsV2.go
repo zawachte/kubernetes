@@ -183,7 +183,7 @@ func (hns hnsV2) updateEndpointPolicy(endpointID string, policy json.RawMessage)
 		Settings:     policy,
 	}
 
-	klog.V(3).Infof("Local endpoint policy added to %s", endpointID)
+	klog.V(3).Infof("Adding policy to endpoint %s", endpointID)
 	LogJson(policy, "Local endpoint policy:", 1)
 
 	return hcn.ModifyEndpointSettings(endpointID, requestMessage)
