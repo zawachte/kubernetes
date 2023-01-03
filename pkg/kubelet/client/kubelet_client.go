@@ -19,6 +19,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -110,6 +111,18 @@ func makeTransport(config *KubeletClientConfig, insecureSkipTLSVerify bool) (htt
 		if err != nil {
 			return nil, fmt.Errorf("failed to get context dialer for 'cluster': got %v", err)
 		}
+	}
+	if dialer == nil {
+		dialer = (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext
+	}
+
+	// If we use are reloading files, we need to handle certificate rotation properly
+	// TODO(jackkleeman): We can also add rotation here when config.HasCertCallback() is true
+	if preTLSConfig.TLS.ReloadTLSFiles {
+		dialer = transport.ConfigureDynamicCertDialer(tlsConfig, dialer)
 	}
 	if dialer != nil || tlsConfig != nil {
 		// If SSH Tunnel is turned on

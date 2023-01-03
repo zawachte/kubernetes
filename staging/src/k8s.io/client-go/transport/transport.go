@@ -152,6 +152,13 @@ func TLSConfigFor(c *Config) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
+func ConfigureDynamicCertDialer(tlsConfig *tls.Config, dialer utilnet.DialFunc) utilnet.DialFunc {
+	dynamicCertDialer := certRotatingDialer(tlsConfig.GetClientCertificate, dialer)
+	tlsConfig.GetClientCertificate = dynamicCertDialer.GetClientCertificate
+	go dynamicCertDialer.Run(wait.NeverStop)
+	return dynamicCertDialer.connDialer.DialContext
+}
+
 // loadTLSFiles copies the data from the CertFile, KeyFile, and CAFile fields into the CertData,
 // KeyData, and CAFile fields, or returns an error. If no error is returned, all three fields are
 // either populated or were empty to start.
